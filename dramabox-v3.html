@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>DramaBox</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --accent: #ff2d55;
+  --gold: #ffd60a;
+  --green: #30d158;
+  --text: #ffffff;
+  --muted: rgba(255,255,255,.5);
+  --surface: rgba(255,255,255,.08);
+  --border: rgba(255,255,255,.12);
+}
+
+html, body {
+  background: #000; color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  height: 100%; overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#app {
+  max-width: 430px; height: 100vh;
+  margin: 0 auto; position: relative;
+  overflow: hidden; background: #000;
+}
+
+/* ─── FEED ─── */
+#feed {
+  height: 100vh;
+  overflow-y: scroll;
+  scroll-snap-type: y mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+#feed::-webkit-scrollbar { display: none; }
+
+/* ─── CARD ─── */
+.drama-card {
+  height: 100vh;
+  scroll-snap-align: start;
+  position: relative;
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  justify-content: flex-end;
+}
+
+/* ─── REAL VIDEO LAYER ─── */
+.card-video-wrap {
+  position: absolute; inset: 0;
+  background: #000;
+  display: flex; align-items: center; justify-content: center;
+}
+.card-video {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.video-tap-area {
+  position: absolute; inset: 0; z-index: 5; cursor: pointer;
+}
+.pause-indicator {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%,-50%) scale(0);
+  background: rgba(0,0,0,.6); backdrop-filter: blur(8px);
+  border-radius: 50%; width: 70px; height: 70px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; z-index: 6;
+  transition: transform .15s cubic-bezier(.34,1.56,.64,1), opacity .3s;
+  opacity: 0;
+  pointer-events: none;
+}
+.pause-indicator.show {
+  transform: translate(-50%,-50%) scale(1);
+  opacity: 1;
+}
+.pause-indicator.hide {
+  transform: translate(-50%,-50%) scale(.8);
+  opacity: 0;
+}
+
+/* ─── SIM BACKGROUND (non-video cards) ─── */
+.card-bg-sim {
+  position: absolute; inset: 0;
+}
+.card-big-emoji {
+  position: absolute; font-size: 210px;
+  opacity: .07; filter: blur(9px);
+  top: 50%; left: 50%;
+  transform: translate(-50%,-55%);
+  pointer-events: none; line-height: 1;
+}
+
+/* Grain */
+.card-bg-sim::after {
+  content: '';
+  position: absolute; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  opacity: .55; pointer-events: none;
+}
+
+.card-scrim {
+  position: absolute; inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(0,0,0,.15) 0%,
+    transparent 28%,
+    transparent 38%,
+    rgba(0,0,0,.5) 62%,
+    rgba(0,0,0,.88) 82%,
+    rgba(0,0,0,.97) 100%
+  );
+  pointer-events: none; z-index: 4;
+}
+
+/* ─── PROGRESS BAR ─── */
+.card-progress-bar {
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 3px; background: rgba(255,255,255,.18); z-index: 20;
+}
+.card-progress-fill {
+  height: 100%; width: 0%;
+  border-radius: 0 2px 2px 0;
+  transition: width .25s linear;
+}
+
+/* ─── TOP ─── */
+.card-top {
+  position: absolute; top: 14px; left: 0; right: 0;
+  padding: 0 16px;
+  display: flex; justify-content: space-between; align-items: center;
+  z-index: 15;
+}
+.app-logo {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 20px; font-weight: 600; letter-spacing: .5px;
+}
+.app-logo span { color: var(--accent); }
+.coins-pill {
+  background: rgba(0,0,0,.6); backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,.2);
+  padding: 6px 12px; border-radius: 20px;
+  font-size: 13px; color: var(--gold);
+  cursor: pointer; display: flex; align-items: center; gap: 5px;
+  transition: border-color .2s;
+}
+.coins-pill:hover { border-color: var(--gold); }
+
+.ep-strip {
+  position: absolute; top: 58px; left: 16px;
+  background: rgba(0,0,0,.55); backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  padding: 4px 10px; border-radius: 8px;
+  font-size: 11px; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--muted); z-index: 15;
+}
+
+/* ─── RIGHT ACTIONS ─── */
+.card-actions {
+  position: absolute; right: 14px; bottom: 150px;
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  z-index: 15;
+}
+.action-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  cursor: pointer; background: none; border: none; color: var(--text);
+}
+.action-icon {
+  width: 48px; height: 48px; border-radius: 50%;
+  background: rgba(0,0,0,.55); backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; transition: all .15s;
+}
+.action-btn:active .action-icon { transform: scale(.86); }
+.action-btn.liked .action-icon { background: rgba(255,45,85,.28); border-color: var(--accent); }
+.action-label { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ─── BOTTOM CONTENT ─── */
+.card-bottom {
+  position: relative; z-index: 15;
+  padding: 0 16px 90px;
+}
+.serial-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(0,0,0,.5); backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  padding: 5px 12px; border-radius: 20px;
+  font-size: 12px; margin-bottom: 11px; cursor: pointer;
+  transition: border-color .2s;
+}
+.serial-chip:hover { border-color: rgba(255,255,255,.35); }
+.serial-chip .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+.ep-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 25px; line-height: 1.22;
+  margin-bottom: 8px;
+  text-shadow: 0 2px 18px rgba(0,0,0,.9);
+}
+.ep-desc {
+  font-size: 14px; line-height: 1.6;
+  color: rgba(255,255,255,.8);
+  margin-bottom: 10px; font-style: italic;
+  text-shadow: 0 1px 10px rgba(0,0,0,.95);
+}
+.ep-cliffhanger {
+  font-size: 13px; color: var(--accent);
+  font-weight: 600; margin-bottom: 16px; letter-spacing: .3px;
+}
+
+/* Video label */
+.real-video-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(255,45,85,.2); border: 1px solid rgba(255,45,85,.4);
+  padding: 4px 10px; border-radius: 8px;
+  font-size: 11px; color: var(--accent); margin-bottom: 14px;
+}
+
+/* ─── LOCK ─── */
+.lock-overlay {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,.78); backdrop-filter: blur(8px);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  z-index: 30; padding: 28px;
+}
+.lock-icon { font-size: 54px; margin-bottom: 16px; }
+.lock-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 24px; margin-bottom: 8px; text-align: center;
+}
+.lock-sub { font-size: 14px; color: var(--muted); margin-bottom: 26px; text-align: center; line-height: 1.65; }
+.lock-cost {
+  background: rgba(255,255,255,.06); border: 1px solid var(--border);
+  border-radius: 14px; padding: 14px 20px; margin-bottom: 20px;
+  text-align: center; width: 100%;
+}
+.lock-cost-num { font-size: 30px; font-weight: 700; color: var(--gold); }
+.lock-cost-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.lock-btn {
+  background: var(--accent); border: none; color: #fff;
+  padding: 15px 0; border-radius: 14px; font-size: 15px; font-weight: 600;
+  cursor: pointer; font-family: 'DM Sans', sans-serif;
+  width: 100%; margin-bottom: 10px;
+  box-shadow: 0 4px 24px rgba(255,45,85,.4);
+  transition: opacity .2s;
+}
+.lock-btn:hover { opacity: .88; }
+.lock-btn-alt {
+  background: transparent; border: 1px solid var(--border);
+  color: var(--muted); padding: 12px 0; border-radius: 14px;
+  font-size: 14px; cursor: pointer;
+  font-family: 'DM Sans', sans-serif; width: 100%;
+}
+
+/* ─── BOTTOM NAV ─── */
+.bottom-nav {
+  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: 100%; max-width: 430px;
+  background: rgba(0,0,0,.88); backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(255,255,255,.07);
+  display: flex; padding: 10px 0 20px; z-index: 100;
+}
+.nav-btn {
+  flex: 1; background: none; border: none;
+  color: rgba(255,255,255,.38); font-size: 11px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  transition: color .2s;
+}
+.nav-btn.active { color: #fff; }
+.nav-icon { font-size: 22px; }
+
+/* ─── FILTER BAR ─── */
+.filter-bar {
+  position: fixed; top: 0; left: 50%; transform: translateX(-50%);
+  width: 100%; max-width: 430px;
+  padding: 10px 16px 0;
+  display: flex; gap: 8px; overflow-x: auto; z-index: 50;
+  scrollbar-width: none; pointer-events: none; opacity: 0;
+  transition: opacity .3s;
+}
+.filter-bar.visible { opacity: 1; pointer-events: all; }
+.filter-bar::-webkit-scrollbar { display: none; }
+.filter-pill {
+  background: rgba(0,0,0,.7); backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,.2);
+  color: rgba(255,255,255,.7); padding: 6px 14px; border-radius: 20px;
+  font-size: 12px; cursor: pointer; white-space: nowrap;
+  transition: all .2s; flex-shrink: 0;
+}
+.filter-pill.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ─── MODALS ─── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.82); backdrop-filter: blur(8px);
+  z-index: 200; align-items: flex-end; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal-sheet {
+  background: #111; border: 1px solid rgba(255,255,255,.1);
+  border-radius: 24px 24px 0 0;
+  padding: 22px 22px 44px; width: 100%; max-width: 430px;
+  animation: slideUp .28s cubic-bezier(.22,.68,0,1.2);
+}
+@keyframes slideUp {
+  from { transform: translateY(50px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+.modal-handle {
+  width: 36px; height: 4px; border-radius: 2px;
+  background: rgba(255,255,255,.15); margin: 0 auto 20px;
+}
+.modal-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 22px; text-align: center; margin-bottom: 4px;
+}
+.modal-sub { font-size: 13px; color: var(--muted); text-align: center; margin-bottom: 22px; }
+.coin-pkg {
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1);
+  border-radius: 14px; padding: 14px 18px;
+  margin-bottom: 10px; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between;
+  transition: border-color .2s, background .2s;
+}
+.coin-pkg:hover { border-color: var(--accent); background: rgba(255,45,85,.07); }
+.coin-pkg.hot { border-color: rgba(255,45,85,.35); }
+.pkg-left { display: flex; align-items: center; gap: 13px; }
+.pkg-emoji { font-size: 26px; }
+.pkg-name { font-size: 15px; font-weight: 600; }
+.pkg-desc { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.pkg-price { font-size: 16px; color: var(--gold); font-weight: 600; }
+.btn-close {
+  width: 100%; background: transparent;
+  border: 1px solid rgba(255,255,255,.1);
+  color: var(--muted); padding: 13px; border-radius: 14px;
+  font-size: 14px; cursor: pointer; margin-top: 8px;
+  font-family: 'DM Sans', sans-serif;
+}
+
+/* Toast */
+#toast {
+  position: fixed; top: 16px; left: 50%;
+  transform: translateX(-50%) translateY(-70px);
+  background: #1c1c1e; border: 1px solid rgba(255,255,255,.15);
+  padding: 10px 20px; border-radius: 20px; font-size: 13px;
+  z-index: 999; transition: transform .3s cubic-bezier(.22,.68,0,1.2);
+  white-space: nowrap; box-shadow: 0 8px 32px rgba(0,0,0,.6);
+}
+#toast.show { transform: translateX(-50%) translateY(0); }
+#toast.success { border-color: var(--green); color: var(--green); }
+#toast.drama { border-color: var(--accent); color: var(--accent); }
+
+/* Scroll hint */
+.scroll-hint {
+  position: absolute; bottom: 92px; left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255,255,255,.4); font-size: 12px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  animation: bounce 2s ease infinite; z-index: 15; pointer-events: none;
+  letter-spacing: .5px;
+}
+@keyframes bounce {
+  0%,100% { transform: translateX(-50%) translateY(0); }
+  50%      { transform: translateX(-50%) translateY(-7px); }
+}
+
+/* Auto-scroll flash */
+.autoscroll-flash {
+  position: absolute; inset: 0; background: rgba(255,255,255,.04);
+  z-index: 50; pointer-events: none;
+  animation: flash .5s ease forwards;
+}
+@keyframes flash { to { opacity: 0; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="toast"></div>
+
+  <!-- Filter bar -->
+  <div class="filter-bar" id="filter-bar">
+    <div class="filter-pill active" onclick="filterFeed('all',this)">Всі</div>
+    <div class="filter-pill" onclick="filterFeed('Мільярдер і Я',this)">💔 Мільярдер і Я</div>
+    <div class="filter-pill" onclick="filterFeed('Тіні Сеула',this)">🌙 Тіні Сеула</div>
+    <div class="filter-pill" onclick="filterFeed('Зрада на Мільйон',this)">💸 Зрада на Мільйон</div>
+  </div>
+
+  <!-- Feed -->
+  <div id="feed"></div>
+
+  <!-- Bottom nav -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" id="nav-home">
+      <div class="nav-icon">🏠</div><span>Стрічка</span>
+    </button>
+    <button class="nav-btn" onclick="toggleFilterBar()">
+      <div class="nav-icon">🎭</div><span>Серіали</span>
+    </button>
+    <button class="nav-btn" onclick="openShop()">
+      <div class="nav-icon">🪙</div>
+      <span id="nav-coins-label">15</span>
+    </button>
+    <button class="nav-btn" onclick="showToast('Профіль — скоро! 👤','drama')">
+      <div class="nav-icon">👤</div><span>Профіль</span>
+    </button>
+  </nav>
+
+  <!-- Shop modal -->
+  <div class="modal-overlay" id="modal-shop">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-title">🪙 Купити монети</div>
+      <div class="modal-sub">Баланс: <span id="shop-bal">15</span> монет</div>
+      <div class="coin-pkg" onclick="buyCoins(10)">
+        <div class="pkg-left"><div class="pkg-emoji">🌱</div>
+          <div><div class="pkg-name">10 монет</div><div class="pkg-desc">Старт</div></div></div>
+        <div class="pkg-price">29 грн</div>
+      </div>
+      <div class="coin-pkg hot" onclick="buyCoins(30)">
+        <div class="pkg-left"><div class="pkg-emoji">🔥</div>
+          <div><div class="pkg-name">30 монет</div><div class="pkg-desc">Популярний вибір</div></div></div>
+        <div class="pkg-price">69 грн</div>
+      </div>
+      <div class="coin-pkg" onclick="buyCoins(80)">
+        <div class="pkg-left"><div class="pkg-emoji">💎</div>
+          <div><div class="pkg-name">80 монет</div><div class="pkg-desc">Максимум</div></div></div>
+        <div class="pkg-price">149 грн</div>
+      </div>
+      <button class="btn-close" onclick="closeShop()">Закрити</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── DATA ────────────────────────────────────────────────────────────
+const ALL_EPISODES = [
+  {
+    id: 1, serial: "Мільярдер і Я", serialColor: "#e63462",
+    ep: 1, total: 7,
+    title: "Незнайомець у ліфті",
+    desc: "Аліна заходить у ліфт і бачить чоловіка, якого вважала мертвим три роки тому. Він дивиться на неї — як на чужу.",
+    cliffhanger: "⚡ Він знає, хто вона. Але мовчить...",
+    emoji: "🏢", free: true,
+    gradient: ["#3d0c0c","#0f0000"],
+    accentColor: "#e63462",
+    likesBase: 12400, comments: "834",
+    hasVideo: true,  // ← your real video!
+  },
+  {
+    id: 2, serial: "Мільярдер і Я", serialColor: "#e63462",
+    ep: 2, total: 7,
+    title: "Таємниця в конверті",
+    desc: "Анонімний лист лежить на столі. Єдине речення: «Твій чоловік — не той, ким здається».",
+    cliffhanger: "⚡ Хто написав? І як вони дізналися?",
+    emoji: "✉️", free: true,
+    gradient: ["#2d0a0a","#080000"],
+    accentColor: "#e63462",
+    likesBase: 9100, comments: "621",
+  },
+  {
+    id: 3, serial: "Мільярдер і Я", serialColor: "#e63462",
+    ep: 3, total: 7,
+    title: "Брехня на вечері",
+    desc: "Сімейна вечеря. Всі посміхаються. Але під столом — три телефони, три розмови, три таємниці.",
+    cliffhanger: "⚡ Хтось із них — не той, ким здається...",
+    emoji: "🍷", free: true,
+    gradient: ["#1e0808","#060000"],
+    accentColor: "#e63462",
+    likesBase: 18700, comments: "1.2к",
+  },
+  {
+    id: 4, serial: "Мільярдер і Я", serialColor: "#e63462",
+    ep: 4, total: 7,
+    title: "Дзвінок опівночі",
+    desc: "О 00:00 телефон задзвонив. Невідомий номер. Голос вимовив лише одне слово — її ім'я.",
+    cliffhanger: "⚡ Цей голос вона хотіла забути назавжди...",
+    emoji: "📱", free: false,
+    gradient: ["#0d0d1a","#030310"],
+    accentColor: "#7c63ff",
+    likesBase: 31200, comments: "2.8к",
+  },
+  {
+    id: 5, serial: "Тіні Сеула", serialColor: "#3949ab",
+    ep: 1, total: 5,
+    title: "Перший туман",
+    desc: "Детектив Мін знаходить записку, написану її власним почерком. Але вона її не писала.",
+    cliffhanger: "⚡ Хто міг знати її підпис настільки точно?",
+    emoji: "🌫️", free: true,
+    gradient: ["#0a0a2e","#02021a"],
+    accentColor: "#3949ab",
+    likesBase: 7600, comments: "445",
+  },
+  {
+    id: 6, serial: "Тіні Сеула", serialColor: "#3949ab",
+    ep: 2, total: 5,
+    title: "Тінь у дзеркалі",
+    desc: "Стара готельна кімната. Дзеркало показує не те, що є. За спиною — тінь, якої немає.",
+    cliffhanger: "⚡ Це маячня? Чи хтось справді там?",
+    emoji: "🪞", free: true,
+    gradient: ["#080820","#010110"],
+    accentColor: "#3949ab",
+    likesBase: 14300, comments: "987",
+  },
+  {
+    id: 7, serial: "Тіні Сеула", serialColor: "#3949ab",
+    ep: 3, total: 5,
+    title: "Зниклий файл",
+    desc: "Секретне досьє зникло. В архіві — лише порожня папка і запах паперу, що горів.",
+    cliffhanger: "⚡ Справу закрили. Але хтось боявся правди.",
+    emoji: "🗂️", free: false,
+    gradient: ["#060618","#01010a"],
+    accentColor: "#3949ab",
+    likesBase: 22100, comments: "1.5к",
+  },
+  {
+    id: 8, serial: "Зрада на Мільйон", serialColor: "#2e7d32",
+    ep: 1, total: 6,
+    title: "Партнери",
+    desc: "Двоє найкращих друзів. Один бізнес. І один із них вже збрехав — ще до підписання контракту.",
+    cliffhanger: "⚡ Дружба чи гра? З першого дня...",
+    emoji: "🤝", free: true,
+    gradient: ["#0a1f0b","#030903"],
+    accentColor: "#2e7d32",
+    likesBase: 5900, comments: "312",
+  },
+  {
+    id: 9, serial: "Зрада на Мільйон", serialColor: "#2e7d32",
+    ep: 2, total: 6,
+    title: "Підписаний чек",
+    desc: "Перший мільйон на рахунку. Святкування. Шампанське. І транзакція, яку ніхто не мав бачити.",
+    cliffhanger: "⚡ Куди пішли 200 тисяч?",
+    emoji: "💰", free: true,
+    gradient: ["#081508","#020602"],
+    accentColor: "#2e7d32",
+    likesBase: 11400, comments: "788",
+  },
+  {
+    id: 10, serial: "Зрада на Мільйон", serialColor: "#2e7d32",
+    ep: 3, total: 6,
+    title: "Схема",
+    desc: "Бухгалтер знайшла цифри, яких не повинно існувати. Тепер вона знає забагато.",
+    cliffhanger: "⚡ Вона вже надіслала скріншот. Комусь.",
+    emoji: "📊", free: false,
+    gradient: ["#060f06","#010401"],
+    accentColor: "#2e7d32",
+    likesBase: 28600, comments: "2.1к",
+  },
+];
+
+// ─── STATE ────────────────────────────────────────────────────────────
+let coins     = parseInt(localStorage.getItem('db_coins') || '15');
+let unlocked  = JSON.parse(localStorage.getItem('db_unlocked') || '[]');
+let liked     = JSON.parse(localStorage.getItem('db_liked') || '[]');
+let likeCounts = JSON.parse(localStorage.getItem('db_likeC') || '{}');
+let activeFilter = 'all';
+let episodes = [...ALL_EPISODES];
+let filterVisible = false;
+let videosPaused = {};
+
+ALL_EPISODES.forEach(ep => { if (ep.free && !unlocked.includes(ep.id)) unlocked.push(ep.id); });
+
+function isUnlocked(id) { return ALL_EPISODES.find(e=>e.id===id)?.free || unlocked.includes(id); }
+function fmtLikes(n) { return n >= 1000 ? (n/1000).toFixed(1)+'к' : n; }
+function getLikeCount(ep) {
+  return likeCounts[ep.id] !== undefined ? likeCounts[ep.id] : ep.likesBase;
+}
+
+function save() {
+  localStorage.setItem('db_coins', coins);
+  localStorage.setItem('db_unlocked', JSON.stringify(unlocked));
+  localStorage.setItem('db_liked', JSON.stringify(liked));
+  localStorage.setItem('db_likeC', JSON.stringify(likeCounts));
+}
+
+// ─── BUILD ────────────────────────────────────────────────────────────
+function buildFeed() {
+  const feed = document.getElementById('feed');
+  feed.innerHTML = episodes.map((ep, i) => buildCard(ep, i)).join('');
+  updateCoinsUI();
+  setupObserver();
+}
+
+function buildCard(ep, index) {
+  const locked = !isUnlocked(ep.id);
+  const isLiked = liked.includes(ep.id);
+  const likeCount = getLikeCount(ep);
+  const bg = `linear-gradient(160deg, ${ep.gradient[0]} 0%, ${ep.gradient[1]} 100%)`;
+
+  const videoLayer = ep.hasVideo ? `
+    <div class="card-video-wrap">
+      <video class="card-video" id="vid-${ep.id}" src="episode1.mp4"
+        playsinline webkit-playsinline muted loop preload="none">
+      </video>
+      <div class="video-tap-area" onclick="toggleVideo(${ep.id})"></div>
+      <div class="pause-indicator" id="pi-${ep.id}">⏸</div>
+    </div>` : `
+    <div class="card-bg-sim" style="background:${bg}">
+      <div class="card-big-emoji">${ep.emoji}</div>
+    </div>`;
+
+  return `
+  <div class="drama-card" id="card-${ep.id}" data-ep="${ep.id}" data-serial="${ep.serial}">
+    ${videoLayer}
+    <div class="card-scrim"></div>
+
+    <div class="card-progress-bar">
+      <div class="card-progress-fill" id="prog-${ep.id}" style="background:${ep.accentColor}"></div>
+    </div>
+
+    <div class="card-top">
+      <div class="app-logo">Drama<span>Box</span></div>
+      <div class="coins-pill" onclick="openShop()">🪙 <span class="coin-count">${coins}</span></div>
+    </div>
+
+    <div class="ep-strip">Серія ${ep.ep} / ${ep.total} · ${ep.serial}</div>
+
+    <div class="card-actions">
+      <button class="action-btn ${isLiked?'liked':''}" onclick="toggleLike(${ep.id},this)">
+        <div class="action-icon">${isLiked?'❤️':'🤍'}</div>
+        <span class="action-label" id="lc-${ep.id}">${fmtLikes(likeCount)}</span>
+      </button>
+      <button class="action-btn" onclick="showToast('Коментарі — скоро! 💬','drama')">
+        <div class="action-icon">💬</div>
+        <span class="action-label">${ep.comments}</span>
+      </button>
+      <button class="action-btn" onclick="shareEp(${ep.id})">
+        <div class="action-icon">↗️</div>
+        <span class="action-label">Поділ.</span>
+      </button>
+      <button class="action-btn" onclick="showToast('Збережено! 🔖','success')">
+        <div class="action-icon">🔖</div>
+        <span class="action-label">Зберегти</span>
+      </button>
+    </div>
+
+    <div class="card-bottom">
+      <div class="serial-chip" style="border-color:${ep.serialColor}55"
+           onclick="filterFeed('${ep.serial}',null)">
+        <span class="dot" style="background:${ep.serialColor}"></span>
+        ${ep.serial}
+      </div>
+      ${ep.hasVideo ? '<div class="real-video-badge">🎬 Справжнє відео</div>' : ''}
+      <div class="ep-title">${ep.title}</div>
+      ${!locked ? `<div class="ep-desc">"${ep.desc}"</div><div class="ep-cliffhanger">${ep.cliffhanger}</div>` : ''}
+      ${!locked && !ep.hasVideo ? buildSimProgress(ep) : ''}
+    </div>
+
+    ${index === 0 ? '<div class="scroll-hint">↑ &nbsp;Гортайте &nbsp;↑</div>' : ''}
+    ${locked ? buildLock(ep) : ''}
+  </div>`;
+}
+
+function buildSimProgress(ep) {
+  return `
+    <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+      <button onclick="startSim(${ep.id})" id="simbtn-${ep.id}"
+        style="background:${ep.accentColor};border:none;color:#fff;
+               padding:10px 22px;border-radius:11px;font-size:14px;
+               font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;
+               display:flex;align-items:center;gap:6px;
+               box-shadow:0 4px 18px ${ep.accentColor}50">
+        ▶ Дивитись
+      </button>
+      ${ep.free ? '<span style="font-size:12px;color:rgba(255,255,255,.4)">✅ Безкоштовно</span>' : ''}
+    </div>`;
+}
+
+function buildLock(ep) {
+  return `
+    <div class="lock-overlay" id="lock-${ep.id}">
+      <div class="lock-icon">🔒</div>
+      <div class="lock-title">"${ep.title}"</div>
+      <div class="lock-sub">Серія ${ep.ep} серіалу «${ep.serial}»<br>Розблокуйте, щоб побачити що буде далі</div>
+      <div class="lock-cost">
+        <div class="lock-cost-num">5 🪙</div>
+        <div class="lock-cost-sub">У вас зараз: <span class="lock-bal">${coins}</span> монет</div>
+      </div>
+      <button class="lock-btn" onclick="tryUnlock(${ep.id})">
+        Розблокувати за 5 🪙
+      </button>
+      <button class="lock-btn-alt" onclick="openShop()">
+        Купити більше монет
+      </button>
+    </div>`;
+}
+
+// ─── INTERSECTION OBSERVER — автозапуск ──────────────────────────────
+let currentVisibleId = null;
+const simTimers = {};
+
+function setupObserver() {
+  const feed = document.getElementById('feed');
+  const options = { root: feed, threshold: 0.65 };
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      const epId = parseInt(entry.target.dataset.ep);
+      const ep = ALL_EPISODES.find(e => e.id === epId);
+      if (!ep) return;
+
+      if (entry.isIntersecting) {
+        currentVisibleId = epId;
+
+        if (ep.hasVideo && isUnlocked(epId)) {
+          // autoplay real video
+          const vid = document.getElementById(`vid-${epId}`);
+          if (vid) {
+            vid.currentTime = 0;
+            vid.play().catch(()=>{});
+            vid.ontimeupdate = () => {
+              const pct = vid.duration ? (vid.currentTime / vid.duration) * 100 : 0;
+              const fill = document.getElementById(`prog-${epId}`);
+              if (fill) fill.style.width = pct + '%';
+              // auto-scroll when video ends (or at 95%)
+              if (pct >= 95) {
+                vid.ontimeupdate = null;
+                autoScrollNext(epId);
+              }
+            };
+          }
+        }
+      } else {
+        if (ep.hasVideo) {
+          const vid = document.getElementById(`vid-${epId}`);
+          if (vid) { vid.pause(); vid.ontimeupdate = null; }
+        } else {
+          stopSim(epId);
+        }
+      }
+    });
+  }, options);
+
+  document.querySelectorAll('.drama-card').forEach(card => observer.observe(card));
+}
+
+// ─── VIDEO TAP ────────────────────────────────────────────────────────
+function toggleVideo(epId) {
+  const vid = document.getElementById(`vid-${epId}`);
+  const pi  = document.getElementById(`pi-${epId}`);
+  if (!vid) return;
+
+  if (vid.paused) {
+    vid.play();
+    pi.textContent = '▶';
+    pi.className = 'pause-indicator show';
+    setTimeout(() => { pi.className = 'pause-indicator hide'; setTimeout(()=>pi.className='pause-indicator',300); }, 600);
+  } else {
+    vid.pause();
+    pi.textContent = '⏸';
+    pi.className = 'pause-indicator show';
+  }
+}
+
+// ─── AUTO SCROLL ──────────────────────────────────────────────────────
+function autoScrollNext(epId) {
+  const currentCard = document.getElementById(`card-${epId}`);
+  if (!currentCard) return;
+  const nextCard = currentCard.nextElementSibling;
+  if (nextCard) {
+    showToast('🎬 Наступна серія...', 'drama');
+    setTimeout(() => { nextCard.scrollIntoView({ behavior: 'smooth' }); }, 800);
+  }
+}
+
+// ─── SIMULATED PROGRESS ───────────────────────────────────────────────
+function startSim(epId) {
+  if (simTimers[epId]) return;
+  const btn = document.getElementById(`simbtn-${epId}`);
+  if (btn) btn.textContent = '⏸ Пауза' , btn.onclick = ()=>pauseSim(epId);
+
+  let p = 0;
+  simTimers[epId] = setInterval(() => {
+    p += 1.4;
+    const fill = document.getElementById(`prog-${epId}`);
+    if (fill) fill.style.width = Math.min(p,100)+'%';
+    if (p >= 100) {
+      stopSim(epId);
+      const btn2 = document.getElementById(`simbtn-${epId}`);
+      if (btn2) { btn2.textContent = '✅ Переглянуто'; btn2.disabled = true; }
+      showToast('🎬 Серія завершена! Гортайте далі ↑', 'drama');
+      autoScrollNext(epId);
+    }
+  }, 120);
+}
+
+function pauseSim(epId) {
+  clearInterval(simTimers[epId]); delete simTimers[epId];
+  const btn = document.getElementById(`simbtn-${epId}`);
+  if (btn) btn.textContent = '▶ Продовжити', btn.onclick = ()=>startSim(epId);
+}
+
+function stopSim(epId) {
+  clearInterval(simTimers[epId]); delete simTimers[epId];
+}
+
+// ─── UNLOCK ───────────────────────────────────────────────────────────
+function tryUnlock(epId) {
+  if (coins >= 5) {
+    coins -= 5;
+    unlocked.push(epId);
+    save();
+    updateCoinsUI();
+    // Rebuild card in place
+    const ep = ALL_EPISODES.find(e=>e.id===epId);
+    const idx = episodes.indexOf(ep);
+    const oldCard = document.getElementById(`card-${epId}`);
+    const newDiv = document.createElement('div');
+    newDiv.innerHTML = buildCard(ep, idx);
+    const newCard = newDiv.firstElementChild;
+    oldCard.replaceWith(newCard);
+    setupObserver();
+    showToast('✅ Серію розблоковано!', 'success');
+  } else {
+    showToast('Недостатньо монет! 🪙', 'drama');
+    openShop();
+  }
+}
+
+// ─── LIKE (з +1 до числа) ─────────────────────────────────────────────
+function toggleLike(epId, btn) {
+  const ep = ALL_EPISODES.find(e=>e.id===epId);
+  const currentCount = getLikeCount(ep);
+
+  if (liked.includes(epId)) {
+    liked = liked.filter(x=>x!==epId);
+    likeCounts[epId] = currentCount - 1;
+    btn.classList.remove('liked');
+    btn.querySelector('.action-icon').textContent = '🤍';
+  } else {
+    liked.push(epId);
+    likeCounts[epId] = currentCount + 1;
+    btn.classList.add('liked');
+    btn.querySelector('.action-icon').textContent = '❤️';
+    showToast('❤️ Вподобано!', 'success');
+
+    // Floating heart animation
+    const card = document.getElementById(`card-${epId}`);
+    const heart = document.createElement('div');
+    heart.textContent = '❤️';
+    heart.style.cssText = `position:absolute;right:44px;bottom:${140+Math.random()*40}px;
+      font-size:28px;z-index:50;pointer-events:none;
+      animation:floatHeart .9s ease forwards;`;
+    card.appendChild(heart);
+    setTimeout(() => heart.remove(), 950);
+  }
+
+  const el = document.getElementById(`lc-${epId}`);
+  if (el) el.textContent = fmtLikes(getLikeCount(ep));
+  save();
+}
+
+// ─── FILTER ───────────────────────────────────────────────────────────
+function filterFeed(serial, pillEl) {
+  activeFilter = serial;
+
+  document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+  if (pillEl) pillEl.classList.add('active');
+  else {
+    // find by text
+    document.querySelectorAll('.filter-pill').forEach(p => {
+      if (p.textContent.includes(serial) || (serial==='all' && p.textContent==='Всі'))
+        p.classList.add('active');
+    });
+  }
+
+  episodes = serial === 'all'
+    ? [...ALL_EPISODES]
+    : ALL_EPISODES.filter(e => e.serial === serial);
+
+  buildFeed();
+
+  // scroll to top
+  document.getElementById('feed').scrollTo({ top: 0, behavior: 'instant' });
+
+  if (serial !== 'all') showToast(`🎬 ${serial}`, 'drama');
+}
+
+function toggleFilterBar() {
+  filterVisible = !filterVisible;
+  document.getElementById('filter-bar').classList.toggle('visible', filterVisible);
+}
+
+// ─── SHARE ────────────────────────────────────────────────────────────
+function shareEp(epId) {
+  const ep = ALL_EPISODES.find(e=>e.id===epId);
+  if (navigator.share) {
+    navigator.share({ title: ep.title, text: ep.cliffhanger.replace('⚡ ',''), url: location.href });
+  } else {
+    showToast('Посилання скопійовано! 🔗', 'success');
+  }
+}
+
+// ─── SHOP ─────────────────────────────────────────────────────────────
+function openShop() {
+  document.getElementById('shop-bal').textContent = coins;
+  document.getElementById('modal-shop').classList.add('open');
+}
+function closeShop() { document.getElementById('modal-shop').classList.remove('open'); }
+function buyCoins(n) {
+  coins += n; save(); updateCoinsUI(); closeShop();
+  showToast(`🪙 +${n} монет додано!`, 'success');
+}
+
+function updateCoinsUI() {
+  document.querySelectorAll('.coin-count').forEach(el => el.textContent = coins);
+  document.querySelectorAll('.lock-bal').forEach(el => el.textContent = coins);
+  document.getElementById('nav-coins-label').textContent = coins;
+  document.getElementById('shop-bal').textContent = coins;
+}
+
+// ─── TOAST ────────────────────────────────────────────────────────────
+let toastT;
+function showToast(msg, type='info') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = `show ${type}`;
+  clearTimeout(toastT);
+  toastT = setTimeout(() => t.className='', 2600);
+}
+
+// ─── CLOSE MODALS ─────────────────────────────────────────────────────
+document.getElementById('modal-shop').addEventListener('click', function(e) {
+  if (e.target===this) closeShop();
+});
+
+// ─── FLOATING HEART CSS ───────────────────────────────────────────────
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes floatHeart {
+    0%   { transform: translateY(0) scale(1); opacity: 1; }
+    100% { transform: translateY(-90px) scale(1.5); opacity: 0; }
+  }
+`;
+document.head.appendChild(style);
+
+// ─── INIT ─────────────────────────────────────────────────────────────
+buildFeed();
+</script>
+</body>
+</html>
